@@ -1,181 +1,143 @@
 const mongoose = require('mongoose');
-const Sale = require('../models/sale');
+const Supplier = require('../models/supplier');
+const Catalog = require('../models/catalog');
 const Product = require('../models/product');
-const Client = require('../models/client');
 
-exports.getAllSales = async (req, res) => {
+exports.getAllSuppliers = async (req, res) => {
     try {
-        const sales = await Sale.find().populate('clientId items.productId');
-        res.json(sales);
+        const suppliers = await Supplier.find().populate('catalogId');
+        res.json(suppliers);
     } catch (err) {
-        res.status(500).send('Error al obtener ventas');
+        res.status(500).send('Error al obtener proveedores');
     }
 };
 
-exports.getSaleById = async (req, res) => {
+exports.getSupplierById = async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(400).send('ID inválido');
         }
-
-        const sale = await Sale.findById(req.params.id).populate('clientId items.productId');
-        if (!sale) return res.status(404).send('Venta no encontrada');
-        res.json(sale);
+        const supplier = await Supplier.findById(req.params.id).populate('catalogId');
+        if (!supplier) return res.status(404).send('Proveedor no encontrado');
+        res.json(supplier);
     } catch (err) {
-        res.status(500).send('Error al obtener la venta');
+        res.status(500).send('Error al obtener proveedor');
     }
 };
 
-exports.createSale = async (req, res) => {
+exports.createSupplier = async (req, res) => {
     try {
-        const sale = new Sale(req.body);
-        await sale.save();
-        res.status(201).json(sale);
+        const supplier = new Supplier(req.body);
+        await supplier.save();
+        res.status(201).json(supplier);
     } catch (err) {
-        res.status(500).send('Error al crear la venta');
+        res.status(500).send('Error al crear proveedor');
     }
 };
 
-exports.updateSale = async (req, res) => {
-    try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).send('ID inválido');
-        }
-
-        const sale = await Sale.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!sale) return res.status(404).send('Venta no encontrada');
-        res.json(sale);
-    } catch (err) {
-        res.status(500).send('Error al actualizar la venta');
-    }
-};
-
-exports.deleteSale = async (req, res) => {
+exports.updateSupplier = async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(400).send('ID inválido');
         }
+        const supplier = await Supplier.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!supplier) return res.status(404).send('Proveedor no encontrado');
+        res.json(supplier);
+    } catch (err) {
+        res.status(500).send('Error al actualizar proveedor');
+    }
+};
 
-        const sale = await Sale.findByIdAndDelete(req.params.id);
-        if (!sale) return res.status(404).send('Venta no encontrada');
+exports.deleteSupplier = async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).send('ID inválido');
+        }
+        const supplier = await Supplier.findByIdAndDelete(req.params.id);
+        if (!supplier) return res.status(404).send('Proveedor no encontrado');
         res.status(204).send();
     } catch (err) {
-        res.status(500).send('Error al eliminar la venta');
+        res.status(500).send('Error al eliminar proveedor');
     }
 };
 
-exports.createSaleWithValidation = async (req, res) => {
+exports.assignCatalogToSupplier = async (req, res) => {
     try {
-        const { clientId, items } = req.body;
-
-        if (!mongoose.Types.ObjectId.isValid(clientId)) {
-            return res.status(400).json({ error: 'ID de cliente inválido' });
+        const { catalogId } = req.body;
+        if (!mongoose.Types.ObjectId.isValid(catalogId) || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).send('ID inválido');
         }
 
-        const client = await Client.findById(clientId);
-        if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+        const catalog = await Catalog.findById(catalogId);
+        if (!catalog) return res.status(404).send('Catálogo no encontrado');
 
-        for (const item of items) {
-            if (!mongoose.Types.ObjectId.isValid(item.productId)) {
-                return res.status(400).json({ error: `ID inválido del producto ${item.productId}` });
-            }
+        const supplier = await Supplier.findById(req.params.id);
+        if (!supplier) return res.status(404).send('Proveedor no encontrado');
 
-            const product = await Product.findById(item.productId);
-            if (!product) return res.status(404).json({ error: `Producto ${item.productId} no encontrado` });
-
-            if (product.stock < item.quantity) {
-                return res.status(400).json({ error: `Inventario insuficiente para el producto ${item.productId}` });
-            }
-        }
-
-        const sale = new Sale(req.body);
-        for (const item of items) {
-            await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
-        }
-
-        await sale.save();
-        res.status(201).json(sale);
-    } catch (error) {
-        res.status(500).json({ error: 'Error en el servidor', details: error.message });
+        supplier.catalogId = catalogId;
+        await supplier.save();
+        res.json(supplier);
+    } catch (err) {
+        res.status(500).send('Error al asignar catálogo al proveedor');
     }
 };
 
-exports.cancelSale = async (req, res) => {
+exports.getSupplierProductCount = async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(400).send('ID inválido');
         }
 
-        const sale = await Sale.findById(req.params.id);
-        if (!sale) return res.status(404).send('Venta no encontrada');
+        const supplier = await Supplier.findById(req.params.id).populate('catalogId');
+        if (!supplier) return res.status(404).send('Proveedor no encontrado');
 
-        for (const item of sale.items) {
-            await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
-        }
+        const productCount = supplier.catalogId
+            ? await Product.countDocuments({ _id: { $in: supplier.catalogId.products } })
+            : 0;
 
-        await sale.deleteOne();
-        res.status(204).send();
+        res.json({ supplierId: supplier._id, productCount });
     } catch (err) {
-        res.status(500).send('Error al cancelar la venta');
+        res.status(500).send('Error al contar productos del proveedor');
     }
 };
 
-exports.getSalesByDateRange = async (req, res) => {
+exports.updateSupplierStatus = async (req, res) => {
     try {
-        const { startDate, endDate } = req.body;
-        const sales = await Sale.find({
-            date: { $gte: new Date(startDate), $lte: new Date(endDate) }
-        }).populate('clientId items.productId');
+        const { status } = req.body;
 
-        const totalSales = sales.length;
-        const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
-
-        res.json({ totalSales, totalRevenue, sales });
-    } catch (err) {
-        res.status(500).send('Error al obtener ventas por rango de fechas');
-    }
-};
-
-exports.applyDiscountToSale = async (req, res) => {
-    try {
-        const { discount } = req.body;
-
-        if (discount < 0 || discount > 100) {
-            return res.status(400).send('Descuento inválido');
+        if (!['active', 'inactive'].includes(status)) {
+            return res.status(400).send('Estado inválido');
         }
 
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(400).send('ID inválido');
         }
 
-        const sale = await Sale.findById(req.params.id);
-        if (!sale) return res.status(404).send('Venta no encontrada');
+        const supplier = await Supplier.findByIdAndUpdate(req.params.id, { status }, { new: true });
+        if (!supplier) return res.status(404).send('Proveedor no encontrado');
 
-        sale.total = sale.total * (1 - discount / 100);
-        await sale.save();
-
-        res.json(sale);
+        res.json(supplier);
     } catch (err) {
-        res.status(500).send('Error al aplicar descuento');
+        res.status(500).send('Error al actualizar estado del proveedor');
     }
 };
 
-exports.getSaleProfit = async (req, res) => {
+exports.getSupplierSummary = async (req, res) => {
     try {
-        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-            return res.status(400).send('ID inválido');
-        }
+        const suppliers = await Supplier.find().populate('catalogId');
+        const summary = await Promise.all(suppliers.map(async (supplier) => {
+            const productCount = supplier.catalogId
+                ? await Product.countDocuments({ _id: { $in: supplier.catalogId.products } })
+                : 0;
 
-        const sale = await Sale.findById(req.params.id).populate('items.productId');
-        if (!sale) return res.status(404).send('Venta no encontrada');
-
-        const profit = sale.items.reduce((sum, item) => {
-            const product = item.productId;
-            return sum + (item.price - product.costPrice) * item.quantity;
-        }, 0);
-
-        res.json({ saleId: sale._id, profit });
+            return {
+                supplierId: supplier._id,
+                name: supplier.name,
+                productCount
+            };
+        }));
+        res.json(summary);
     } catch (err) {
-        res.status(500).send('Error al calcular ganancia');
+        res.status(500).send('Error al obtener resumen de proveedores');
     }
 };
